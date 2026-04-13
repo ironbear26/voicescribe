@@ -1,0 +1,17 @@
+{
+  "anthropic_api_key": "",
+  "transcription_backend": "whisper",
+  "whisper_model": "base",
+  "parakeet_model": "nvidia/parakeet-tdt-0.6b-v2",
+  "language": "de",
+  "hotkeys": {
+    "transcript": "<ctrl>+<shift>+t",
+    "assistant": "<ctrl>+<shift>+a",
+    "dictation": "<ctrl>+<shift>+d",
+    "stop": "<ctrl>+<shift>+s"
+  },
+  "auto_paste": false,
+  "auto_copy": true,
+  "assistant_prompt": "Du bist ein Assistent der gesprochene Texte bereinigt. Entferne Korrekturen (z.B. 'nein, 9:30 Uhr' → nur '9:30 Uhr'), Füllwörter und Wiederholungen. Behalte den Inhalt aber gib nur den finalen sauberen Text zurück.",
+  "dictation_prompt": "Wandle den folgenden gesprochenen Text in eine natürliche, gut geschriebene Nachricht um. Passe Stil, Grammatik und Formulierungen an, damit es wie ein professionell geschriebener Text klingt. Gib nur den finalen Text zurück ohne Erklärungen."
+}

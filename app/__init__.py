@@ -1,0 +1,1 @@
+# VoiceScribe - macOS Sprachtranskriptions-App
