@@ -1,5 +1,4 @@
 import AppKit
-import UserNotifications
 
 enum RecordingMode {
     case transcript
@@ -46,7 +45,6 @@ class StatusBarController {
         buildMenu()
         startParakeetDaemon()
         setupHotkeys()
-        requestNotificationPermission()
     }
 
     private func setupStatusItem() {
@@ -125,10 +123,6 @@ class StatusBarController {
         hotkeyManager.onDictation  = { [weak self] in self?.startMode(.dictation) }
         hotkeyManager.onStop       = { [weak self] in self?.stopAndProcess() }
         hotkeyManager.register()
-    }
-
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     // MARK: - Daemon Management
@@ -322,12 +316,11 @@ class StatusBarController {
     // MARK: - Notifications
 
     private func sendNotification(text: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "VoiceScribe"
-        let preview = text.count > 100 ? String(text.prefix(100)) + "…" : text
-        content.body = preview
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+        // Zeige Transkript kurz als Tooltip im Status-Bar-Button
+        let preview = text.count > 60 ? String(text.prefix(60)) + "…" : text
+        DispatchQueue.main.async {
+            self.statusItem.button?.toolTip = preview
+        }
     }
 
     // MARK: - UI Helpers
