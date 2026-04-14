@@ -1,21 +1,34 @@
-# VoiceScribe 🎙
+# VoiceScribe
 
-**VoiceScribe** ist eine macOS Menu-Bar-App für lokale Sprachtranskription.  
+**VoiceScribe** ist eine native macOS Menu-Bar-App für lokale Sprachtranskription.  
 Sprich – drücke die Stopptaste – und der Text erscheint direkt in der Zwischenablage oder wird automatisch eingefügt.
 
-Transkription erfolgt **vollständig lokal** mit [faster-whisper](https://github.com/SYSTRAN/faster-whisper).  
-Optionale KI-Verarbeitung läuft über die **Claude-API** von Anthropic.
+Transkription erfolgt **vollständig lokal** mit [Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) von NVIDIA (via NeMo).  
+Optionale KI-Nachbearbeitung läuft über die **Claude-API** von Anthropic.
 
 ---
 
-## Funktionsweise
+## Architektur
 
-1. Du drückst einen Hotkey oder klickst im Menü auf einen Modus
-2. Die App nimmt deine Stimme auf (rotes Icon im Menü)
-3. Du drückst erneut den Hotkey oder Stopp → Whisper transkribiert lokal
-4. Je nach Modus wird der Text ggf. mit Claude bereinigt
-5. Der Text wird in die Zwischenablage kopiert (und optional automatisch eingefügt)
-6. Du erhältst eine macOS-Benachrichtigung mit der Vorschau
+```
+┌────────────────────────────────────────────┐
+│  VoiceScribe.app  (Swift / AppKit)         │
+│                                            │
+│  NSStatusItem   →  Menu Bar Icon           │
+│  AVAudioEngine  →  Mikrofon-Aufnahme       │
+│  Carbon Hotkeys →  Globale Tastenkürzel    │
+│  URLSession     →  HTTP an Daemon + API    │
+└──────────────────────┬─────────────────────┘
+                       │ HTTP 127.0.0.1:9393
+┌──────────────────────▼─────────────────────┐
+│  Parakeet-Daemon  (Python / NeMo)          │
+│                                            │
+│  POST /transcribe  →  WAV → Text           │
+│  GET  /status      →  {"ready": true}      │
+└────────────────────────────────────────────┘
+```
+
+Die Swift-App startet den Python-Daemon beim Launch automatisch und kommuniziert per HTTP mit ihm. Das Parakeet-Modell bleibt im RAM – keine Ladezeit nach dem ersten Start.
 
 ---
 
@@ -23,10 +36,12 @@ Optionale KI-Verarbeitung läuft über die **Claude-API** von Anthropic.
 
 | Modus | Hotkey | Beschreibung |
 |---|---|---|
-| **Transkript-Modus** | `Ctrl+Shift+T` | Rohtranskription direkt von Whisper |
-| **Assistent-Modus** | `Ctrl+Shift+A` | KI bereinigt Korrekturen und Füllwörter |
-| **Diktat-Modus** | `Ctrl+Shift+D` | KI wandelt Gesprochenes in natürlichen Text um |
+| **Transkript-Modus** | `Ctrl+Shift+T` | Rohtranskription direkt von Parakeet |
+| **Assistent-Modus** | `Ctrl+Shift+A` | Claude bereinigt Korrekturen und Füllwörter |
+| **Diktat-Modus** | `Ctrl+Shift+D` | Claude wandelt Gesprochenes in natürlichen Text um |
 | **Stopp** | `Ctrl+Shift+S` | Aufnahme manuell stoppen |
+
+Denselben Hotkey erneut drücken stoppt ebenfalls die Aufnahme.
 
 **Beispiel Assistent-Modus:**  
 Gesprochen: *„Ja nein, also das Meeting ist um nein halt um halb zehn"*  
@@ -38,119 +53,129 @@ Ergebnis: *„Hey, könntest du morgen bitte prüfen, ob der Bericht fertig ist?
 
 ---
 
-## Installation
+## Voraussetzungen
 
-### Voraussetzungen
-
-- macOS 12 (Monterey) oder neuer
-- Python 3.10 oder neuer
-- [Homebrew](https://brew.sh) empfohlen
-
-### Schritte
+- **macOS 13** (Ventura) oder neuer
+- **Python 3.10** oder neuer
+- **Xcode Command Line Tools** (für `swiftc`)
 
 ```bash
-# 1. Repository klonen oder Dateien herunterladen
-cd /pfad/zu/sprachsteuerung
-
-# 2. Virtuelle Umgebung erstellen (empfohlen)
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# 4. App starten
-python main.py
+xcode-select --install
 ```
 
-Das Whisper-Modell (`base`, ca. 145 MB) wird beim **ersten Start** automatisch heruntergeladen.  
-Beim ersten Hotkey-Druck lädt das Modell in den Speicher (kann 5–15 Sekunden dauern).
+---
+
+## Installation
+
+```bash
+# 1. Repository klonen
+cd /pfad/zu/sprachsteuerung
+
+# 2. Python-Umgebung einrichten + App bauen
+./install.sh
+```
+
+`install.sh` erledigt automatisch:
+- Python-venv erstellen unter `~/Library/Application Support/VoiceScribe/venv/`
+- `nemo_toolkit[asr]` installieren (PyTorch + NeMo, ca. 3–5 GB)
+- Swift-Quellen kompilieren
+- `VoiceScribe.app` bauen
+
+Nur die App neu bauen (nach Code-Änderungen):
+
+```bash
+./build.sh
+```
+
+Dann starten:
+
+```bash
+open VoiceScribe.app
+```
 
 ---
 
-## Benötigte macOS-Berechtigungen
+## macOS-Berechtigungen
 
-Die App benötigt **zwei** Berechtigungen:
-
-### 1. Mikrofon
+### Mikrofon
 Wird beim ersten Start automatisch angefragt.  
-Manuell: *Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon → Terminal / Python aktivieren*
+Manuell: *Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon → VoiceScribe aktivieren*
 
-### 2. Bedienungshilfen (für globale Hotkeys)
-Ohne diese Berechtigung funktionieren die Tastenkombinationen **nicht**.
+### Bedienungshilfen (für Auto-Einfügen)
+Nur nötig, wenn "Auto-Einfügen" aktiviert ist (simuliertes Cmd+V).
 
-**Einrichten:**
 1. *Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen*
-2. **Terminal** (oder dein Python-Interpreter) hinzufügen und aktivieren
-3. App neu starten
+2. **VoiceScribe** hinzufügen und aktivieren
 
-> **Hinweis:** Wenn die Hotkeys nicht funktionieren, erscheint eine Warnung im Terminal. Die App ist dann nur über das Menü in der Menüleiste bedienbar.
+### Globale Hotkeys
+Carbon-Hotkeys (`RegisterEventHotKey`) benötigen **keine** Bedienungshilfen-Berechtigung.  
+Sie funktionieren direkt nach dem Start.
 
 ---
 
-## Konfiguration
+## Einstellungen
 
-Die Konfigurationsdatei `config.json` liegt im App-Verzeichnis und kann direkt bearbeitet werden.  
-Im Menü: *Einstellungen öffnen* öffnet die Datei automatisch im Standard-Editor.
+Der API-Key und weitere Optionen sind über das Menü erreichbar:  
+**Menüleiste → Einstellungen...**
 
-### Alle Einstellungen
+Alternativ direkt in `~/Library/Application Support/VoiceScribe/config.json` bearbeiten:
 
 ```json
 {
-  "anthropic_api_key": "",        // Claude API-Schlüssel (für Modi 2 & 3)
-  "whisper_model": "base",        // Whisper-Modell (tiny/base/small/medium/large)
-  "language": "de",               // Sprache für Whisper (de, en, fr, ...)
-  "hotkeys": {
-    "transcript": "<ctrl>+<shift>+t",
-    "assistant":  "<ctrl>+<shift>+a",
-    "dictation":  "<ctrl>+<shift>+d",
-    "stop":       "<ctrl>+<shift>+s"
-  },
-  "auto_paste": false,            // Text automatisch einfügen (Cmd+V)
-  "auto_copy": true,              // Text immer in Zwischenablage kopieren
-  "assistant_prompt": "...",      // System-Prompt für Assistent-Modus
-  "dictation_prompt": "..."       // System-Prompt für Diktat-Modus
+  "anthropicApiKey": "sk-ant-...",
+  "autoPaste": false,
+  "autoCopy": true,
+  "language": "de",
+  "assistantPrompt": "Du bist ein Assistent...",
+  "dictationPrompt": "Wandle den folgenden..."
 }
 ```
 
-### Whisper-Modelle im Vergleich
-
-| Modell | Größe | Geschwindigkeit | Genauigkeit |
-|---|---|---|---|
-| `tiny` | ~75 MB | Sehr schnell | Gering |
-| `base` | ~145 MB | Schnell | Gut (**Standard**) |
-| `small` | ~470 MB | Mittel | Sehr gut |
-| `medium` | ~1.5 GB | Langsam | Exzellent |
-| `large-v3` | ~3 GB | Sehr langsam | Höchste |
-
-Für die meisten Anwendungsfälle ist `base` oder `small` empfohlen.
+### Anthropic API-Key
+Für Assistent-Modus und Diktat-Modus wird ein [Anthropic API-Key](https://console.anthropic.com) benötigt.  
+Ohne API-Key funktioniert der **Transkript-Modus** vollständig offline.
 
 ---
 
-## Claude API-Schlüssel konfigurieren
+## Parakeet-Modell
 
-Der Assistent-Modus und Diktat-Modus benötigen einen Anthropic API-Schlüssel.
+VoiceScribe verwendet **nvidia/parakeet-tdt-0.6b-v2**, ein 0.6B-Parameter-Modell von NVIDIA.
 
-1. API-Schlüssel unter [console.anthropic.com](https://console.anthropic.com) erstellen
-2. Schlüssel in `config.json` eintragen:
-   ```json
-   {
-     "anthropic_api_key": "sk-ant-..."
-   }
-   ```
-3. App neu starten (oder Einstellungen neu laden)
+**Wichtige Hinweise:**
+- Das Modell wurde primär auf **Englisch** trainiert und erzielt auf Englisch die beste Qualität.
+- Für Deutsch und andere Sprachen funktioniert es, aber die Genauigkeit ist geringer als bei sprachspezifischen Modellen.
+- **Erster Start:** Das Modell (~1,2 GB) wird beim ersten Daemon-Start heruntergeladen und unter `~/.cache/huggingface/` gespeichert. Das dauert je nach Verbindung 2–10 Minuten.
+- Nach dem ersten Download bleibt das Modell lokal und lädt in Sekunden.
 
-**Ohne API-Schlüssel** funktioniert nur der **Transkript-Modus** (reine Whisper-Transkription).
+Den Lade-Status sieht man unter **Menüleiste → Modell-Status**.
 
 ---
 
-## Tipps
+## Verzeichnisstruktur
 
-- **Aufnahme stoppen:** Denselben Hotkey erneut drücken **oder** `Ctrl+Shift+S`
-- **Auto-Einfügen:** Im Menü unter „Auto-Einfügen: Aus/Ein" umschalten – praktisch für Direkteingabe in Textfelder
-- **Sprache ändern:** `"language": "en"` für Englisch, `"language": null` für automatische Erkennung
-- **Lange Texte:** Das Whisper-Modell verarbeitet Aufnahmen beliebiger Länge
-- **Datenschutz:** Alle Aufnahmen werden lokal verarbeitet; die Audiodaten verlassen das Gerät nicht (außer bei aktivierter Claude-Verarbeitung wird der *Text* an die API gesendet)
+```
+sprachsteuerung/
+├── Sources/                    Swift-Quellen
+│   ├── AppDelegate.swift
+│   ├── StatusBarController.swift
+│   ├── AudioRecorder.swift
+│   ├── HotkeyManager.swift
+│   ├── TranscriptionClient.swift
+│   ├── AssistantClient.swift
+│   ├── ClipboardManager.swift
+│   ├── SettingsManager.swift
+│   └── SettingsWindowController.swift
+├── Resources/
+│   ├── Info.plist
+│   └── VoiceScribe.entitlements
+├── python/
+│   ├── server.py               Parakeet HTTP-Daemon
+│   └── requirements.txt
+├── build.sh                    App kompilieren und bündeln
+├── install.sh                  Alles einrichten
+├── config.json                 Standard-Konfiguration
+└── README.md
+```
 
 ---
 
@@ -158,22 +183,14 @@ Der Assistent-Modus und Diktat-Modus benötigen einen Anthropic API-Schlüssel.
 
 | Problem | Lösung |
 |---|---|
-| Hotkeys funktionieren nicht | Bedienungshilfen-Berechtigung prüfen (siehe oben) |
-| Kein Mikrofon-Zugriff | Mikrofon-Berechtigung in Systemeinstellungen prüfen |
-| Modell-Download schlägt fehl | Internetverbindung prüfen; Modell wird unter `~/.cache/huggingface/` gespeichert |
-| Assistent gibt Fehler | API-Schlüssel in config.json prüfen |
-| App startet nicht | `pip install -r requirements.txt` erneut ausführen |
-
----
-
-## Technische Details
-
-- **Transkription:** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) mit CTranslate2 (CPU, int8-Quantisierung)
-- **KI-Verarbeitung:** Claude 3.5 Haiku via Anthropic API mit Prompt-Caching
-- **Audio:** sounddevice, 16 kHz Mono WAV
-- **Hotkeys:** pynput keyboard listener
-- **Zwischenablage:** pyperclip + pyautogui
-- **UI:** rumps (Cocoa menu bar wrapper)
+| `swiftc` nicht gefunden | `xcode-select --install` |
+| Hotkeys ohne Funktion | App neu starten; beim ersten Start einmal auf das Icon klicken |
+| Mikrofon-Fehler | Berechtigung in Systemeinstellungen prüfen |
+| Daemon startet nicht | Log prüfen: `~/Library/Logs/VoiceScribe/daemon.log` |
+| Modell-Download schlägt fehl | Internetverbindung prüfen; Proxy-Einstellungen beachten |
+| „App beschädigt" Meldung | `xattr -cr VoiceScribe.app` ausführen |
+| API-Fehler bei Claude | API-Key in Einstellungen prüfen |
+| Auto-Einfügen funktioniert nicht | Bedienungshilfen-Berechtigung für VoiceScribe vergeben |
 
 ---
 
