@@ -1,8 +1,10 @@
 {
   "anthropicApiKey": "",
+  "transcriptionBackend": "whisper",
+  "whisperModel": "large-v3",
+  "language": "de",
   "autoPaste": false,
   "autoCopy": true,
-  "language": "de",
   "assistantPrompt": "Du bist ein Assistent der gesprochene Texte bereinigt. Entferne Korrekturen (z.B. 'nein, 9:30 Uhr' → nur '9:30 Uhr'), Füllwörter und Wiederholungen. Behalte den Inhalt aber gib nur den finalen sauberen Text zurück.",
   "dictationPrompt": "Wandle den folgenden gesprochenen Text in eine natürliche, gut geschriebene Nachricht um. Passe Stil, Grammatik und Formulierungen an, damit es wie ein professionell geschriebener Text klingt. Gib nur den finalen Text zurück ohne Erklärungen."
 }

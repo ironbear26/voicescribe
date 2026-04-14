@@ -38,20 +38,25 @@ class TranscriptionClient {
 
     /// Check if the daemon is running and model is loaded.
     func isReady() async -> Bool {
+        await statusInfo().0
+    }
+
+    /// Returns (ready, infoString) from /status.
+    func statusInfo() async -> (Bool, String) {
         let url = serverURL.appendingPathComponent("status")
         var request = URLRequest(url: url, timeoutInterval: 3)
         request.httpMethod = "GET"
-
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             let json = try JSONDecoder().decode([String: AnyDecodable].self, from: data)
-            if let ready = json["ready"]?.value as? Bool {
-                return ready
-            }
+            let ready   = json["ready"]?.value as? Bool   ?? false
+            let model   = json["model"]?.value  as? String ?? ""
+            let error   = json["error"]?.value  as? String ?? ""
+            let info    = ready ? model : (error.isEmpty ? model : error)
+            return (ready, info)
         } catch {
-            // Daemon not running or not reachable
+            return (false, "Daemon nicht erreichbar")
         }
-        return false
     }
 
     /// Poll /status until the model is ready or the timeout expires.
