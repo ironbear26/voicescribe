@@ -1,0 +1,8 @@
+import AppKit
+
+// SPM entry point – replaces @NSApplicationMain
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)  // Menu bar only, no Dock icon
+app.run()

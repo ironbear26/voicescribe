@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh – Compiles VoiceScribe Swift sources and creates VoiceScribe.app
+# build.sh – Baut VoiceScribe via Swift Package Manager und erstellt das .app-Bundle
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,50 +7,40 @@ APP_NAME="VoiceScribe"
 APP_BUNDLE="${SCRIPT_DIR}/${APP_NAME}.app"
 MACOS_DIR="${APP_BUNDLE}/Contents/MacOS"
 RES_DIR="${APP_BUNDLE}/Contents/Resources"
-SRC_DIR="${SCRIPT_DIR}/Sources"
 RES_SRC_DIR="${SCRIPT_DIR}/Resources"
 
 echo "=== VoiceScribe Build ==="
 echo "Ziel: ${APP_BUNDLE}"
 echo ""
 
-# ── 1. Create bundle structure ────────────────────────────────────────────────
+# ── 1. Swift Package Manager Build ───────────────────────────────────────────
+echo "→ Kompiliere mit swift build (Release)..."
+cd "${SCRIPT_DIR}"
+swift build -c release 2>&1
+
+# Ermittle den Pfad des kompilierten Binaries
+ARCH="$(uname -m)"
+if [[ "${ARCH}" == "arm64" ]]; then
+    BINARY="${SCRIPT_DIR}/.build/arm64-apple-macosx/release/${APP_NAME}"
+else
+    BINARY="${SCRIPT_DIR}/.build/x86_64-apple-macosx/release/${APP_NAME}"
+fi
+
+if [[ ! -f "${BINARY}" ]]; then
+    echo "FEHLER: Binary nicht gefunden unter ${BINARY}" >&2
+    exit 1
+fi
+echo "   ✓ Kompilierung erfolgreich"
+echo ""
+
+# ── 2. App-Bundle-Verzeichnisstruktur ─────────────────────────────────────────
 echo "→ Erstelle App-Bundle-Verzeichnisstruktur..."
 mkdir -p "${MACOS_DIR}"
 mkdir -p "${RES_DIR}"
 
-# ── 2. Detect architecture ───────────────────────────────────────────────────
-ARCH="$(uname -m)"
-if [[ "${ARCH}" == "arm64" ]]; then
-    TARGET="arm64-apple-macosx13.0"
-else
-    TARGET="x86_64-apple-macosx13.0"
-fi
-echo "→ Architektur: ${ARCH}  (target: ${TARGET})"
-
-# ── 3. Compile Swift sources ─────────────────────────────────────────────────
-echo "→ Kompiliere Swift-Quellen..."
-swiftc \
-    "${SRC_DIR}/AppDelegate.swift" \
-    "${SRC_DIR}/StatusBarController.swift" \
-    "${SRC_DIR}/AudioRecorder.swift" \
-    "${SRC_DIR}/HotkeyManager.swift" \
-    "${SRC_DIR}/TranscriptionClient.swift" \
-    "${SRC_DIR}/AssistantClient.swift" \
-    "${SRC_DIR}/ClipboardManager.swift" \
-    "${SRC_DIR}/SettingsManager.swift" \
-    "${SRC_DIR}/SettingsWindowController.swift" \
-    -o "${MACOS_DIR}/${APP_NAME}" \
-    -framework AppKit \
-    -framework Foundation \
-    -framework AVFoundation \
-    -framework Carbon \
-    -framework CoreGraphics \
-    -framework UserNotifications \
-    -target "${TARGET}" \
-    -swift-version 5
-
-echo "   ✓ Kompilierung erfolgreich"
+# ── 3. Copy binary into bundle ───────────────────────────────────────────────
+echo "→ Kopiere Binary ins Bundle..."
+cp "${BINARY}" "${MACOS_DIR}/${APP_NAME}"
 
 # ── 4. Copy Info.plist ────────────────────────────────────────────────────────
 echo "→ Kopiere Info.plist..."
